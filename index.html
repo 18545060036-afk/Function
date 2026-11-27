@@ -1,0 +1,586 @@
+
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>数学神器 Pro Max</title>
+<link rel="apple-touch-icon" href="icon.png"> 
+<style>
+  :root {
+    --glass-bg: rgba(255, 255, 255, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.8);
+    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  }
+  
+  html,body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #e0e5ec;
+    background-image: 
+      radial-gradient(circle at 15% 50%, rgba(255, 177, 153, 0.6), transparent 50%),
+      radial-gradient(circle at 85% 30%, rgba(144, 202, 249, 0.7), transparent 50%),
+      radial-gradient(circle at 50% 80%, rgba(195, 236, 181, 0.6), transparent 50%);
+  }
+
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  #c2d { background: #fff; }
+  #c3d { background: #f8f9fa; display: none; /* 初始隐藏 */ }
+
+  .glass-panel {
+    position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 20;
+    background: var(--glass-bg);
+    backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+    border: 1px solid var(--glass-border); border-radius: 20px;
+    box-shadow: var(--glass-shadow);
+    padding: 10px; display: flex; flex-direction: column; gap: 8px;
+    transition: transform .3s cubic-bezier(0.25, 1, 0.5, 1), opacity .3s;
+    max-height: 75vh; overflow-y: auto;
+  }
+  .glass-panel.hidden { transform: translateY(-120%); opacity: 0; pointer-events: none; }
+
+  .tabs { display: flex; background: rgba(0,0,0,0.05); border-radius: 12px; padding: 4px; gap: 4px; }
+  .tab { flex: 1; text-align: center; padding: 8px 0; border-radius: 8px; font-size: 14px; font-weight: 600; color: #666; cursor: pointer; transition: all .2s; }
+  .tab.active { background: #fff; color: #007aff; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+
+  .tab-content { display: none; flex-direction: column; gap: 8px; }
+  .tab-content.active { display: flex; }
+
+  textarea { width: 100%; box-sizing: border-box; font-size: 15px; font-family: ui-monospace, Menlo, monospace; padding: 10px; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; resize: none; height: 75px; background: rgba(255,255,255,0.7); }
+  textarea:focus { outline: none; border-color: #007aff; background: #fff; }
+
+  .range-inputs { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #555; }
+  .range-inputs input { width: 50px; padding: 6px; border-radius: 8px; border: 1px solid #ccc; text-align: center; font-size: 13px; }
+
+  #sliders { display: flex; flex-direction: column; gap: 6px; }
+  .slider-row { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.5); padding: 4px 10px; border-radius: 8px; }
+  .slider-label { font-weight: bold; width: 15px; }
+  .slider-val { color: #007aff; width: 40px; text-align: right; font-weight: 600; font-size: 13px; }
+  input[type=range] { flex: 1; accent-color: #007aff; height: 20px; }
+  
+  #keypad { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+  #keypad::-webkit-scrollbar { display: none; }
+  .key { background: rgba(255,255,255,0.8); color: #007aff; border: 0; border-radius: 8px; padding: 6px 12px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+
+  .calc-screen { background: rgba(255,255,255,0.8); border-radius: 12px; padding: 15px; text-align: right; font-size: 32px; font-weight: 500; min-height: 45px; }
+  .calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .calc-btn { background: rgba(255,255,255,0.7); border: 0; border-radius: 12px; padding: 15px 0; font-size: 20px; font-weight: 500; }
+  .calc-btn:active { background: rgba(200,200,200,0.8); }
+  .calc-btn.op { color: #007aff; background: rgba(230, 240, 255, 0.7); }
+  .calc-btn.eq { background: #007aff; color: #fff; }
+
+  .mod-row { display: flex; gap: 10px; margin-bottom: 8px; }
+  .mod-input { flex: 1; font-size: 20px; padding: 10px; border-radius: 10px; border: 1px solid #ccc; text-align: center; font-weight: 600; }
+  .mod-result { background: rgba(255,255,255,0.9); border-radius: 12px; padding: 15px; display: flex; justify-content: space-around; }
+  .mod-res-value { font-size: 28px; font-weight: bold; color: #007aff; }
+
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .btn { flex: 1; font-size: 15px; padding: 10px; border: 0; border-radius: 12px; background: #007aff; color: #fff; font-weight: 600; }
+  .btn.sec { background: rgba(255,255,255,0.8); color: #007aff; }
+  
+  #toggle { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 30; width: 50px; height: 50px; border-radius: 25px; border: 1px solid var(--glass-border); background: var(--glass-bg); backdrop-filter: blur(15px); font-size: 24px; display: flex; align-items: center; justify-content: center; }
+  
+  #msg { position: fixed; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 10; background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); color: #fff; font-size: 13px; padding: 8px 14px; border-radius: 10px; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c2d"></canvas>
+<canvas id="c3d"></canvas>
+
+<div id="panel" class="glass-panel">
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('graph', this)">📈 2D画板</div>
+    <div class="tab" onclick="switchTab('3d', this)">🧊 3D曲面</div>
+    <div class="tab" onclick="switchTab('calc', this)">🧮 计算器</div>
+    <div class="tab" onclick="switchTab('mod', this)">➗ 余数</div>
+  </div>
+
+  <!-- 2D 画板 -->
+  <div id="tab-graph" class="tab-content active">
+    <textarea id="expr2d" spellcheck="false">y = a * x^2 - 2
+y = 2x + 1
+y = sin(x)</textarea>
+    <div class="range-inputs">
+      <span>定义域 x:</span>
+      <input type="number" id="dom-min" placeholder="最小" value="">
+      <span>至</span>
+      <input type="number" id="dom-max" placeholder="最大" value="">
+      <span>值域 y:</span>
+      <input type="number" id="ran-min" placeholder="最小" value="">
+      <span>至</span>
+      <input type="number" id="ran-max" placeholder="最大" value="">
+    </div>
+    <div id="sliders2d"></div>
+    <div id="keypad">
+      <button class="key" onclick="insertStr('expr2d', 'x')">x</button>
+      <button class="key" onclick="insertStr('expr2d', '^')">^</button>
+      <button class="key" onclick="insertStr('expr2d', 'sin(')">sin(</button>
+      <button class="key" onclick="insertStr('expr2d', 'cos(')">cos(</button>
+      <button class="key" onclick="insertStr('expr2d', 'sqrt(')">√</button>
+      <button class="key" onclick="insertStr('expr2d', 'π')">π</button>
+      <button class="key" onclick="insertStr('expr2d', 'a')">a</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="drawBtn">绘制 & 求交点</button>
+      <button class="btn sec" id="resetBtn">复位视图</button>
+    </div>
+  </div>
+
+  <!-- 3D 曲面 -->
+  <div id="tab-3d" class="tab-content">
+    <textarea id="expr3d" spellcheck="false">z = sin(x) * cos(y)</textarea>
+    <div class="row">
+      <button class="btn" id="draw3dBtn">生成 3D 曲面</button>
+      <button class="btn sec" onclick="reset3D()">复位视角</button>
+    </div>
+    <div style="font-size:12px; color:#666; margin-top:5px;">* 单指拖动旋转，双指捏合缩放</div>
+  </div>
+
+  <!-- 计算器 -->
+  <div id="tab-calc" class="tab-content">
+    <div class="calc-screen" id="calc-screen">0</div>
+    <div class="calc-grid">
+      <button class="calc-btn op" onclick="calcInput('C')">C</button>
+      <button class="calc-btn op" onclick="calcInput('(')">(</button>
+      <button class="calc-btn op" onclick="calcInput(')')">)</button>
+      <button class="calc-btn op" onclick="calcInput('/')">÷</button>
+      <button class="calc-btn" onclick="calcInput('7')">7</button>
+      <button class="calc-btn" onclick="calcInput('8')">8</button>
+      <button class="calc-btn" onclick="calcInput('9')">9</button>
+      <button class="calc-btn op" onclick="calcInput('*')">×</button>
+      <button class="calc-btn" onclick="calcInput('4')">4</button>
+      <button class="calc-btn" onclick="calcInput('5')">5</button>
+      <button class="calc-btn" onclick="calcInput('6')">6</button>
+      <button class="calc-btn op" onclick="calcInput('-')">-</button>
+      <button class="calc-btn" onclick="calcInput('1')">1</button>
+      <button class="calc-btn" onclick="calcInput('2')">2</button>
+      <button class="calc-btn" onclick="calcInput('3')">3</button>
+      <button class="calc-btn op" onclick="calcInput('+')">+</button>
+      <button class="calc-btn" onclick="calcInput('0')">0</button>
+      <button class="calc-btn" onclick="calcInput('.')">.</button>
+      <button class="calc-btn op" onclick="calcInput('sin(')">sin</button>
+      <button class="calc-btn eq" onclick="calcEquals()">=</button>
+    </div>
+  </div>
+
+  <!-- 余数计算器 -->
+  <div id="tab-mod" class="tab-content">
+    <div class="mod-row">
+      <input type="number" id="mod-dividend" class="mod-input" value="400" oninput="calcMod()">
+      <span style="font-size:24px">÷</span>
+      <input type="number" id="mod-divisor" class="mod-input" value="360" oninput="calcMod()">
+    </div>
+    <div style="display:flex; gap:8px; margin-top:4px;">
+      <button class="btn sec" onclick="setMod(360)">360°</button>
+      <button class="btn sec" onclick="setMod(180)">180°</button>
+      <button class="btn sec" onclick="setMod(90)">90°</button>
+    </div>
+    <div class="mod-result">
+      <div><span style="font-size:13px;color:#888">商</span><br><span class="mod-res-value" id="mod-q">1</span></div>
+      <div><span style="font-size:13px;color:#888">余数</span><br><span class="mod-res-value" id="mod-r" style="color:#ff3b30">40</span></div>
+    </div>
+  </div>
+</div>
+
+<button id="toggle" onclick="document.getElementById('panel').classList.toggle('hidden'); setTimeout(resizeAll, 300);">☰</button>
+<div id="msg">就绪</div>
+
+<script>
+const msgEl = document.getElementById('msg');
+function showMsg(txt) { msgEl.innerText = txt; }
+
+window.switchTab = function(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + tabId).classList.add('active');
+  
+  document.getElementById('c2d').style.display = (tabId === 'graph') ? 'block' : 'none';
+  document.getElementById('c3d').style.display = (tabId === '3d') ? 'block' : 'none';
+  
+  resizeAll();
+  if(tabId === 'graph') draw2D();
+  if(tabId === '3d') draw3D();
+};
+
+window.insertStr = function(id, str) {
+  const el = document.getElementById(id);
+  const start = el.selectionStart, end = el.selectionEnd;
+  el.value = el.value.substring(0, start) + str + el.value.substring(end);
+  el.selectionStart = el.selectionEnd = start + str.length;
+  el.focus();
+  if (id === 'expr2d') { updateSliders(); draw2D(); }
+};
+
+function preprocess(str) {
+  let s = str;
+  s = s.replace(/（/g, '(').replace(/）/g, ')').replace(/，/g, ',');
+  s = s.replace(/×/g, '*').replace(/÷/g, '/').replace(/π/g, 'PI');
+  s = s.replace(/\bln\(/g, 'log(').replace(/\blg\(/g, 'log10(');
+  s = s.replace(/(\d)([a-zA-Z\(])/g, '$1*$2');
+  s = s.replace(/(\))(\d|[a-zA-Z])/g, '$1*$2');
+  s = s.replace(/\b(sin|cos|tan|sqrt|log|abs)\s+([a-zA-Z0-9]+)\b/g, '$1($2)');
+  s = s.replace(/\^/g, '**');
+  return s;
+}
+
+// ==========================================
+// 1. 2D 画板逻辑 (定义域/值域/交点)
+// ==========================================
+const c2d = document.getElementById('c2d');
+const ctx2d = c2d.getContext('2d');
+const expr2dEl = document.getElementById('expr2d');
+const sliders2dContainer = document.getElementById('sliders2d');
+const COLORS = ['#007aff','#ff3b30','#34c759','#ff9500','#af52de','#5ac8fa','#ff2d55','#8e8e93','#00c7be','#ffcc00'];
+
+let unitX = 60, unitY = 60, ox = 0, oy = 0;
+let paramValues = { a: 1, b: 0, c: 1, k: 1 };
+
+function compile2D(expr) {
+  const src = preprocess(expr);
+  return new Function('x', 'p', `with(Math){ 
+    const a = p.a || 1, b = p.b || 0, c = p.c || 1, k = p.k || 1;
+    return (${src}); 
+  }`);
+}
+
+function extractParams(expr) {
+  const matches = expr.match(/[a-zA-Z]+/g) || [];
+  const p = new Set();
+  const exclude = ['x', 'e', 'pi', 'sin', 'cos', 'tan', 'sqrt', 'abs', 'log', 'log10', 'exp'];
+  matches.forEach(m => { if (!exclude.includes(m.toLowerCase()) && m.length === 1) p.add(m.toLowerCase()); });
+  return Array.from(p);
+}
+
+function updateSliders() {
+  const lines = expr2dEl.value.split('\n');
+  let allParams = new Set();
+  lines.forEach(line => { extractParams(line).forEach(p => allParams.add(p)); });
+  const current = Array.from(sliders2dContainer.querySelectorAll('.slider-row')).map(el => el.dataset.param);
+  const next = Array.from(allParams).sort();
+  if (current.join(',') === next.join(',')) return;
+
+  sliders2dContainer.innerHTML = '';
+  next.forEach(p => {
+    if (paramValues[p] === undefined) paramValues[p] = 1;
+    const row = document.createElement('div');
+    row.className = 'slider-row';
+    row.dataset.param = p;
+    row.innerHTML = `<div class="slider-label">${p}</div>
+      <input type="range" min="-10" max="10" step="0.1" value="${paramValues[p]}" oninput="handleSlider('${p}', this.value)">
+      <div class="slider-val" id="val-${p}">${paramValues[p].toFixed(1)}</div>`;
+    sliders2dContainer.appendChild(row);
+  });
+}
+window.handleSlider = function(p, val) {
+  paramValues[p] = parseFloat(val);
+  document.getElementById('val-' + p).textContent = paramValues[p].toFixed(1);
+  draw2D();
+};
+
+function draw2D() {
+  updateSliders();
+  const W = innerWidth, H = innerHeight;
+  ctx2d.clearRect(0, 0, W, H);
+  if (ox === 0 && oy === 0) { ox = W / 2; oy = H / 2; }
+
+  // 绘制网格
+  const step = 60;
+  ctx2d.strokeStyle = 'rgba(0,0,0,0.06)';
+  for(let x = ox % step; x < W; x += step) { ctx2d.beginPath(); ctx2d.moveTo(x, 0); ctx2d.lineTo(x, H); ctx2d.stroke(); }
+  for(let y = oy % step; y < H; y += step) { ctx2d.beginPath(); ctx2d.moveTo(0, y); ctx2d.lineTo(W, y); ctx2d.stroke(); }
+  
+  // 坐标轴
+  ctx2d.strokeStyle = 'rgba(0,0,0,0.3)'; ctx2d.lineWidth = 1.5;
+  ctx2d.beginPath(); ctx2d.moveTo(0, oy); ctx2d.lineTo(W, oy); ctx2d.stroke();
+  ctx2d.beginPath(); ctx2d.moveTo(ox, 0); ctx2d.lineTo(ox, H); ctx2d.stroke();
+
+  // 获取限制
+  const dMin = parseFloat(document.getElementById('dom-min').value);
+  const dMax = parseFloat(document.getElementById('dom-max').value);
+  const rMin = parseFloat(document.getElementById('ran-min').value);
+  const rMax = parseFloat(document.getElementById('ran-max').value);
+
+  const toSX = x => ox + x * unitX;
+  const toSY = y => oy - y * unitY;
+
+  const lines = expr2dEl.value.split('\n').filter(s => s.trim() !== '');
+  let parsedFuncs = [];
+  let errors = [];
+
+  // 1. 先编译所有合法函数
+  lines.forEach((line, idx) => {
+    let s = line.replace(/^y\s*=\s*/i, '').replace(/^f\s*\(\s*x\s*\)\s*=\s*/i, '').trim();
+    if(!s) return;
+    try {
+      const f = compile2D(s);
+      parsedFuncs.push({ f, color: COLORS[idx % COLORS.length], expr: line });
+    } catch(e) { errors.push(`第${idx+1}行错`); }
+  });
+
+  // 2. 绘制所有曲线
+  const curvesData = [];
+  parsedFuncs.forEach((func, i) => {
+    ctx2d.strokeStyle = func.color;
+    ctx2d.lineWidth = 2.5;
+    ctx2d.beginPath();
+    let pen = false;
+    let points = []; // 用于求交点记录
+
+    for (let px = 0; px <= W; px += 1) {
+      const x = (px - ox) / unitX;
+      // 检查定义域限制
+      if (!isNaN(dMin) && x < dMin) { pen = false; continue; }
+      if (!isNaN(dMax) && x > dMax) { pen = false; continue; }
+
+      let y; 
+      try { y = func.f(x, paramValues); } catch(e) { y = NaN; }
+      
+      // 检查值域限制
+      if (!isFinite(y) || (!isNaN(rMin) && y < rMin) || (!isNaN(rMax) && y > rMax)) {
+        pen = false; points.push(null); continue; 
+      }
+
+      points.push({ x, y });
+      const py = toSY(y);
+      if (py < -500 || py > H + 500) { pen = false; continue; }
+      if (!pen) { ctx2d.moveTo(px, py); pen = true; } else { ctx2d.lineTo(px, py); }
+    }
+    ctx2d.stroke();
+    curvesData.push(points);
+  });
+
+  // 3. 求交点 (遍历两两组合)
+  if (curvesData.length >= 2) {
+    ctx2d.fillStyle = '#000';
+    ctx2d.font = 'bold 13px monospace';
+    ctx2d.textAlign = 'left';
+    
+    for (let i = 0; i < curvesData.length; i++) {
+      for (let j = i + 1; j < curvesData.length; j++) {
+        const c1 = curvesData[i], c2 = curvesData[j];
+        let intersections = [];
+        
+        for (let k = 1; k < Math.min(c1.length, c2.length); k++) {
+          if (c1[k] && c2[k] && c1[k-1] && c2[k-1]) {
+            const diff1 = c1[k-1].y - c2[k-1].y;
+            const diff2 = c1[k].y - c2[k].y;
+            // 变号代表有交点
+            if (diff1 * diff2 <= 0) {
+              // 简单线性插值求更精确的 x
+              const ratio = Math.abs(diff1) / (Math.abs(diff1) + Math.abs(diff2));
+              const ix = c1[k-1].x + ratio * (c1[k].x - c1[k-1].x);
+              const iy = c1[k-1].y + ratio * (c1[k].y - c1[k-1].y);
+              
+              // 避免记录太近的同一个交点
+              if (!intersections.some(pt => Math.abs(pt.x - ix) < 0.5)) {
+                intersections.push({ x: ix, y: iy });
+              }
+            }
+          }
+        }
+
+        // 画交点
+        intersections.forEach(pt => {
+          const sx = toSX(pt.x), sy = toSY(pt.y);
+          if (sx >= 0 && sx <= W && sy >= 0 && sy <= H) {
+            ctx2d.beginPath();
+            ctx2d.arc(sx, sy, 5, 0, Math.PI * 2);
+            ctx2d.fillStyle = '#fff';
+            ctx2d.fill();
+            ctx2d.strokeStyle = '#000';
+            ctx2d.lineWidth = 2;
+            ctx2d.stroke();
+            // 标注文字
+            ctx2d.fillStyle = '#000';
+            ctx2d.fillText(`(${pt.x.toFixed(2)}, ${pt.y.toFixed(2)})`, sx + 8, sy - 8);
+          }
+        });
+      }
+    }
+  }
+
+  showMsg(errors.length ? errors[0] : `已绘制 ${parsedFuncs.length} 条函数`);
+}
+
+// ==========================================
+// 2. 纯原生 3D 曲面引擎
+// ==========================================
+const c3d = document.getElementById('c3d');
+const ctx3d = c3d.getContext('2d');
+let rotX = -0.5, rotY = 0.5, zoom3d = 1;
+let isDragging3d = false, lastX3d = 0, lastY3d = 0, pinchDist3d = 0;
+
+function project(x, y, z) {
+  // 简单的旋转矩阵
+  let x1 = x * Math.cos(rotY) - z * Math.sin(rotY);
+  let z1 = x * Math.sin(rotY) + z * Math.cos(rotY);
+  let y1 = y * Math.cos(rotX) - z1 * Math.sin(rotX);
+  let z2 = y * Math.sin(rotX) + z1 * Math.cos(rotX);
+  // 透视投影
+  const fov = 500 * zoom3d;
+  const scale = fov / (fov + z2);
+  return {
+    x: innerWidth / 2 + x1 * scale * 40,
+    y: innerHeight / 2 - y1 * scale * 40,
+    depth: z2
+  };
+}
+
+function draw3D() {
+  const W = innerWidth, H = innerHeight;
+  ctx3d.clearRect(0, 0, W, H);
+  
+  const expr = document.getElementById('expr3d').value.replace(/^z\s*=\s*/i, '').trim();
+  if(!expr) return;
+  
+  let f;
+  try {
+    const src = preprocess(expr);
+    f = new Function('x', 'y', `with(Math){ return (${src}); }`);
+  } catch(e) { showMsg("3D表达式错误"); return; }
+
+  const N = 25; // 网格密度 (25x25)
+  const size = 5; // 绘图范围 [-5, 5]
+  const step = (size * 2) / N;
+  
+  const points = [];
+  for(let i=0; i<=N; i++) {
+    points[i] = [];
+    for(let j=0; j<=N; j++) {
+      const x = -size + i * step;
+      const y = -size + j * step;
+      let z = 0;
+      try { z = f(x, y); } catch(e) { z = 0; }
+      if(!isFinite(z)) z = 0;
+      z = Math.max(-10, Math.min(10, z)); // 截断Z轴防止画面爆炸
+      points[i][j] = project(x, z, y);
+    }
+  }
+
+  // 绘制线框 (基于深度排序的伪3D)
+  ctx3d.lineWidth = 1;
+  ctx3d.strokeStyle = 'rgba(0,122,255,0.4)';
+  
+  // 画横向线
+  for(let i=0; i<=N; i++) {
+    ctx3d.beginPath();
+    for(let j=0; j<=N; j++) {
+      const p = points[i][j];
+      if(j===0) ctx3d.moveTo(p.x, p.y);
+      else ctx3d.lineTo(p.x, p.y);
+    }
+    ctx3d.stroke();
+  }
+  
+  // 画纵向线
+  for(let j=0; j<=N; j++) {
+    ctx3d.beginPath();
+    for(let i=0; i<=N; i++) {
+      const p = points[i][j];
+      if(i===0) ctx3d.moveTo(p.x, p.y);
+      else ctx3d.lineTo(p.x, p.y);
+    }
+    ctx3d.stroke();
+  }
+
+  // 画3D坐标轴
+  const origin = project(0,0,0);
+  const ax = project(6,0,0); // x轴
+  const ay = project(0,6,0); // y轴
+  const az = project(0,0,6); // z轴
+  
+  ctx3d.lineWidth = 2;
+  ctx3d.strokeStyle = '#ff3b30'; ctx3d.beginPath(); ctx3d.moveTo(origin.x, origin.y); ctx3d.lineTo(ax.x, ax.y); ctx3d.stroke();
+  ctx3d.strokeStyle = '#34c759'; ctx3d.beginPath(); ctx3d.moveTo(origin.x, origin.y); ctx3d.lineTo(ay.x, ay.y); ctx3d.stroke();
+  ctx3d.strokeStyle = '#007aff'; ctx3d.beginPath(); ctx3d.moveTo(origin.x, origin.y); ctx3d.lineTo(az.x, az.y); ctx3d.stroke();
+  
+  showMsg("3D 曲面已生成");
+}
+
+function reset3D() { rotX = -0.5; rotY = 0.5; zoom3d = 1; draw3D(); }
+
+c3d.addEventListener('touchstart', e => {
+  if(e.touches.length === 1) {
+    isDragging3d = true;
+    lastX3d = e.touches[0].clientX;
+    lastY3d = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
+    pinchDist3d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  }
+}, {passive: false});
+
+c3d.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if(isDragging3d && e.touches.length === 1) {
+    rotY += (e.touches[0].clientX - lastX3d) * 0.01;
+    rotX += (e.touches[0].clientY - lastY3d) * 0.01;
+    lastX3d = e.touches[0].clientX;
+    lastY3d = e.touches[0].clientY;
+    draw3D();
+  } else if(e.touches.length === 2) {
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    zoom3d *= d / pinchDist3d;
+    zoom3d = Math.max(0.2, Math.min(zoom3d, 5));
+    pinchDist3d = d;
+    draw3D();
+  }
+}, {passive: false});
+
+c3d.addEventListener('touchend', () => { isDragging3d = false; });
+
+
+// ==========================================
+// 3. 计算器 & 余数模块
+// ==========================================
+let calcExpr = '';
+const calcScreen = document.getElementById('calc-screen');
+window.calcInput = v => {
+  if(v === 'C') { calcExpr = ''; calcScreen.innerText = '0'; return; }
+  calcExpr += v; calcScreen.innerText = calcExpr;
+};
+window.calcEquals = () => {
+  try {
+    let res = new Function('with(Math){ return (' + calcExpr + ') }')();
+    res = Math.round(res * 1e10) / 1e10;
+    calcScreen.innerText = res; calcExpr = res.toString();
+  } catch(e) { calcScreen.innerText = '错误'; calcExpr = ''; }
+};
+
+window.calcMod = () => {
+  const d = parseFloat(document.getElementById('mod-dividend').value) || 0;
+  const v = parseFloat(document.getElementById('mod-divisor').value) || 1;
+  const q = Math.floor(d / v);
+  const r = d % v;
+  document.getElementById('mod-q').innerText = q;
+  document.getElementById('mod-r').innerText = Math.round(r * 1e10) / 1e10;
+};
+window.setMod = v => { document.getElementById('mod-divisor').value = v; calcMod(); };
+
+// ==========================================
+// 初始化
+// ==========================================
+function resizeAll() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  [c2d, c3d].forEach(canvas => {
+    canvas.width = innerWidth * dpr;
+    canvas.height = innerHeight * dpr;
+    canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+  });
+  if(document.getElementById('tab-graph').classList.contains('active')) draw2D();
+  if(document.getElementById('tab-3d').classList.contains('active')) draw3D();
+}
+
+document.getElementById('drawBtn').onclick = draw2D;
+document.getElementById('resetBtn').onclick = () => { ox = innerWidth/2; oy = innerHeight/2; unitX = 60; unitY = 60; draw2D(); };
+document.getElementById('draw3dBtn').onclick = draw3D;
+expr2dEl.addEventListener('input', updateSliders);
+
+window.addEventListener('resize', resizeAll);
+resizeAll();
+calcMod();
+</script>
+</body>
+</html>
