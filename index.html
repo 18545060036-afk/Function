@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>函数绘图</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#fff;font-family:-apple-system,sans-serif;}
+  #c{display:block;width:100vw;height:100vh;touch-action:none;background:#fff;}
+  #panel{position:fixed;top:0;left:0;right:0;z-index:20;padding:calc(8px + env(safe-area-inset-top)) 12px 10px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-bottom:1px solid #e5e5e5;display:flex;flex-direction:column;gap:8px;transition:transform .25s ease;}
+  #panel.hidden{transform:translateY(-110%);}
+  #expr{width:100%;box-sizing:border-box;font-size:16px;font-family:ui-monospace,Menlo,monospace;padding:8px 10px;border:1px solid #d0d0d0;border-radius:10px;resize:none;height:96px;line-height:1.5;background:#fafafa;}
+  #expr:focus{outline:none;border-color:#007aff;background:#fff;}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .btn{font-size:15px;padding:8px 14px;border:0;border-radius:10px;background:#007aff;color:#fff;font-weight:600;}
+  .btn.sec{background:#eef2f7;color:#007aff;}
+  .hint{font-size:12px;color:#888;line-height:1.4;}
+  .hint code{background:#f0f0f0;padding:1px 4px;border-radius:4px;}
+  #toggle{position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:30;width:44px;height:44px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
+  #msg{position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:10;background:rgba(0,0,0,.72);color:#fff;font-size:13px;padding:6px 10px;border-radius:8px;max-width:70vw;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <textarea id="expr" spellcheck="false" autocapitalize="off" autocomplete="off">sin(x)
+sin(x)'
+0.1*x^2</textarea>
+  <div class="hint">每行一个函数；行尾加 <b>'</b> 表示求导，如 <code>sin(x)'</code>；支持 x^2、sqrt(x)、exp(x)、log(x)、PI、E。</div>
+  <div class="row">
+    <button class="btn" id="drawBtn">绘制</button>
+    <button class="btn sec" id="resetBtn">复位视图</button>
+    <button class="btn sec" id="saveBtn">保存预设</button>
+  </div>
+</div>
+<button id="toggle" title="显示/隐藏面板">☰</button>
+<div id="msg">就绪</div>
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+const exprEl = document.getElementById('expr');
+const msgEl = document.getElementById('msg');
+const panel = document.getElementById('panel');
+
+let unitX = 60, unitY = 60;
+let ox = 0, oy = 0;
+let initialized = false;
+const COLORS = ['#007aff','#ff3b30','#34c759','#ff9500','#af52de','#5ac8fa','#ff2d55','#8e8e93'];
+
+function compile(expr) {
+  const src = expr.replace(/\^/g, '**');
+  return new Function('x', `with(Math){return (${src});}`);
+}
+
+function makeDerivative(f) {
+  return function (x) {
+    const h = Math.max(1e-6, Math.abs(x) * 1e-6);
+    return (f(x + h) - f(x - h)) / (2 * h);
+  };
+}
+
+function parseLine(raw) {
+  let s = raw.trim();
+  if (!s) return null;
+  s = s.replace(/^y\s*=\s*/i, '');
+  s = s.replace(/^f\s*\(\s*x\s*\)\s*=\s*/i, '');
+  let isDeriv = false;
+  if (s.endsWith("'")) {
+    isDeriv = true;
+    s = s.slice(0, -1).trim();
+  }
+  if (!s) return null;
+  return { expr: s, isDeriv, raw: raw.trim() };
+}
+
+function niceStep(raw) {
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+}
+
+function toSX(x){ return ox + x * unitX; }
+function toSY(y){ return oy - y * unitY; }
+
+function fmt(v, step) {
+  if (Math.abs(v) < step * 1e-6) return '0';
+  const abs = Math.abs(v);
+  if (abs >= 1e6 || abs < 1e-4) return v.toExponential(1).replace('e+', 'e');
+  let digits = 0;
+  if (step < 1) digits = Math.min(6, Math.ceil(-Math.log10(step)));
+  let s = v.toFixed(digits);
+  if (s.indexOf('.') !== -1) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  return s;
+}
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const W = innerWidth, H = innerHeight;
+  c.width = W * dpr;
+  c.height = H * dpr;
+  c.style.width = W + 'px';
+  c.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (!initialized) { ox = W / 2; oy = H / 2; initialized = true; }
+  redraw();
+}
+
+function redraw() {
+  const W = innerWidth, H = innerHeight;
+  ctx.clearRect(0, 0, W, H);
+
+  const stepX = niceStep(56 / unitX);
+  const stepY = niceStep(56 / unitY);
+  const i0 = Math.floor((0 - ox) / unitX / stepX);
+  const i1 = Math.ceil((W - ox) / unitX / stepX);
+  const j0 = Math.floor((oy - H) / unitY / stepY);
+  const j1 = Math.ceil(oy / unitY / stepY);
+
+  // 网格
+  ctx.strokeStyle = '#ececec';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  for (let i = i0; i <= i1; i++) {
+    const sx = toSX(i * stepX);
+    ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
+  }
+  for (let j = j0; j <= j1; j++) {
+    const sy = toSY(j * stepY);
+    ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
+  }
+
+  // 坐标轴
+  const axisY = toSY(0);
+  const axisX = toSX(0);
+  ctx.strokeStyle = '#b0b0b0';
+  ctx.lineWidth = 1.2;
+  if (axisY >= 0 && axisY <= H) { ctx.beginPath(); ctx.moveTo(0, axisY); ctx.lineTo(W, axisY); ctx.stroke(); }
+  if (axisX >= 0 && axisX <= W) { ctx.beginPath(); ctx.moveTo(axisX, 0); ctx.lineTo(axisX, H); ctx.stroke(); }
+
+  // 曲线
+  const lines = exprEl.value.split('\n').map(parseLine).filter(Boolean);
+  const errors = [];
+  const legend = [];
+  let drawn = 0;
+
+  lines.forEach((item, idx) => {
+    let f;
+    try { f = compile(item.expr); } catch (e) { errors.push(`第${idx + 1}行：${e.message}`); return; }
+    if (item.isDeriv) f = makeDerivative(f);
+
+    const color = COLORS[idx % COLORS.length];
+    legend.push({ text: item.raw, color });
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash(item.isDeriv ? [6, 4] : []);
+    ctx.beginPath();
+    let pen = false;
+    for (let px = 0; px <= W; px += 0.5) {
+      const x = (px - ox) / unitX;
+      let y;
+      try { y = f(x); } catch (e) { y = NaN; }
+      if (!isFinite(y) || Math.abs(y) > 1e6) { pen = false; continue; }
+      const py = toSY(y);
+      if (py < -500 || py > H + 500) { pen = false; continue; }
+      if (!pen) { ctx.moveTo(px, py); pen = true; }
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    drawn++;
+  });
+
+  // 刻度数字
+  ctx.font = '12px -apple-system, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,255,255,.9)';
+  ctx.fillStyle = '#666';
+
+  let xLy;
+  if (axisY >= 14 && axisY <= H - 14) xLy = axisY + 14;
+  else if (axisY < 0) xLy = 16;
+  else xLy = H - 16;
+
+  ctx.textAlign = 'center';
+  for (let i = i0; i <= i1; i++) {
+    if (i === 0) continue;
+    const sx = toSX(i * stepX);
+    if (sx < 18 || sx > W - 18) continue;
+    const text = fmt(i * stepX, stepX);
+    ctx.strokeText(text, sx, xLy);
+    ctx.fillText(text, sx, xLy);
+  }
+
+  let yLx;
+  if (axisX >= 40 && axisX <= W - 40) yLx = axisX - 8;
+  else if (axisX < 0) yLx = 10;
+  else yLx = W - 10;
+
+  ctx.textAlign = 'right';
+  for (let j = j0; j <= j1; j++) {
+    if (j === 0) continue;
+    const sy = toSY(j * stepY);
+    if (sy < 10 || sy > H - 10) continue;
+    const text = fmt(j * stepY, stepY);
+    ctx.strokeText(text, yLx, sy);
+    ctx.fillText(text, yLx, sy);
+  }
+
+  // 原点 0
+  if (axisX >= 0 && axisX <= W && axisY >= 0 && axisY <= H) {
+    ctx.textAlign = 'right';
+    ctx.strokeText('0', axisX - 5, axisY + 14);
+    ctx.fillText('0', axisX - 5, axisY + 14);
+  }
+
+  // 图例
+  if (legend.length) {
+    ctx.font = '12px -apple-system, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    let ly = H - 44 - (legend.length - 1) * 20;
+    legend.forEach(item => {
+      const label = item.text.length > 24 ? item.text.slice(0, 22) + '…' : item.text;
+      const tw = ctx.measureText(label).width;
+      const bx = 10;
+      ctx.fillStyle = 'rgba(255,255,255,.88)';
+      ctx.fillRect(bx - 4, ly - 9, tw + 30, 18);
+      ctx.fillStyle = item.color;
+      ctx.fillRect(bx, ly - 4, 8, 8);
+      ctx.fillStyle = '#333';
+      ctx.fillText(label, bx + 14, ly + 1);
+      ly += 20;
+    });
+  }
+
+  if (errors.length) msgEl.textContent = errors[0];
+  else if (drawn === 0) msgEl.textContent = '请输入函数';
+  else msgEl.textContent = `已绘制 ${drawn} 条`;
+}
+
+// 触摸手势
+let mode = null, last = null, pinch = null;
+let rafId = 0;
+function scheduleDraw() {
+  if (rafId) return;
+  rafId = requestAnimationFrame(() => { rafId = 0; redraw(); });
+}
+
+c.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    mode = 'pan';
+    last = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    pinch = null;
+  } else if (e.touches.length === 2) {
+    mode = 'pinch';
+    last = null;
+    const [a, b] = e.touches;
+    pinch = { dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), cx: (a.clientX + b.clientX) / 2, cy: (a.clientY + b.clientY) / 2 };
+  }
+}, { passive: false });
+
+c.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (mode === 'pan' && e.touches.length === 1) {
+    const t = e.touches[0];
+    ox += t.clientX - last.x;
+    oy += t.clientY - last.y;
+    last = { x: t.clientX, y: t.clientY };
+    scheduleDraw();
+  }
+  if (mode === 'pinch' && e.touches.length === 2) {
+    const [a, b] = e.touches;
+    const nd = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    const ncx = (a.clientX + b.clientX) / 2;
+    const ncy = (a.clientY + b.clientY) / 2;
+    const s = nd / pinch.dist;
+    ox = ncx + (ox - pinch.cx) * s;
+    oy = ncy + (oy - pinch.cy) * s;
+    unitX = Math.min(Math.max(unitX * s, 1e-3), 1e6);
+    unitY = Math.min(Math.max(unitY * s, 1e-3), 1e6);
+    ox += ncx - pinch.cx;
+    oy += ncy - pinch.cy;
+    pinch = { dist: nd, cx: ncx, cy: ncy };
+    scheduleDraw();
+  }
+}, { passive: false });
+
+c.addEventListener('touchend', e => {
+  if (e.touches.length === 0) { mode = null; last = null; pinch = null; }
+  else if (e.touches.length === 1) {
+    mode = 'pan'; pinch = null;
+    last = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+});
+c.addEventListener('touchcancel', () => { mode = null; last = null; pinch = null; });
+
+// 按钮
+document.getElementById('drawBtn').addEventListener('click', redraw);
+document.getElementById('resetBtn').addEventListener('click', () => {
+  unitX = 60; unitY = 60;
+  ox = innerWidth / 2; oy = innerHeight / 2;
+  redraw();
+});
+document.getElementById('saveBtn').addEventListener('click', () => {
+  localStorage.setItem('graph_expr', exprEl.value);
+  msgEl.textContent = '预设已保存';
+});
+document.getElementById('toggle').addEventListener('click', () => {
+  panel.classList.toggle('hidden');
+  setTimeout(redraw, 260);
+});
+
+// 加载预设
+const saved = localStorage.getItem('graph_expr');
+if (saved) exprEl.value = saved;
+
+addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
