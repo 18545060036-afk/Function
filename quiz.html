@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>极简智能题库 Pro</title>
+<style>
+  :root {
+    --glass-bg: rgba(255, 255, 255, 0.7); 
+    --glass-border: rgba(255, 255, 255, 0.9);
+    --primary: #007aff;
+    --success: #34c759;
+    --danger: #ff3b30;
+  }
+  
+  html,body {
+    margin: 0; padding: 0; min-height: 100%; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #e0e5ec;
+    background-image: radial-gradient(circle at 10% 20%, rgba(255, 150, 150, 0.7), transparent 40%), radial-gradient(circle at 90% 80%, rgba(130, 200, 255, 0.7), transparent 40%);
+    background-size: cover; background-attachment: fixed;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px; box-sizing: border-box; overflow-x: hidden;
+  }
+
+  .container { width: 100%; max-width: 600px; margin-top: env(safe-area-inset-top); }
+
+  .card {
+    background: var(--glass-bg); backdrop-filter: blur(35px) saturate(180%); -webkit-backdrop-filter: blur(35px) saturate(180%);
+    border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
+    padding: 20px; margin-bottom: 20px; display: none;
+  }
+  .card.active { display: block; animation: slideIn 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+  h1, h2 { color: #333; margin-top: 0; font-weight: 700; }
+  
+  textarea { 
+    width: 100%; box-sizing: border-box; height: 150px; border-radius: 16px; 
+    border: 1px solid rgba(0,0,0,0.1); padding: 15px; font-size: 15px; 
+    background: rgba(255,255,255,0.7); resize: vertical; color: #333; margin-bottom: 15px;
+  }
+  textarea:focus { outline: none; border-color: var(--primary); background: #fff; }
+  
+  .btn {
+    width: 100%; padding: 16px; border-radius: 16px; border: 1px solid var(--glass-border);
+    background: var(--primary); color: #fff; font-weight: 700; font-size: 16px;
+    box-shadow: 0 4px 12px rgba(0,122,255,0.3); cursor: pointer; transition: all 0.2s;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn.sec { background: rgba(255,255,255,0.7); color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+
+  .progress-bar { height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; margin-bottom: 20px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s ease; }
+  
+  .q-title { font-size: 20px; font-weight: 600; line-height: 1.5; margin-bottom: 25px; color: #111; }
+  
+  .option {
+    background: rgba(255,255,255,0.8); border: 2px solid transparent; border-radius: 16px;
+    padding: 16px; margin-bottom: 12px; font-size: 17px; color: #333; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: all 0.2s; display: flex; align-items: center;
+  }
+  .option .badge {
+    display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center;
+    background: rgba(0,0,0,0.05); border-radius: 8px; margin-right: 15px; font-weight: bold; color: #666; font-size: 14px;
+  }
+  .option.correct { border-color: var(--success); background: rgba(52, 199, 89, 0.1); color: #000; }
+  .option.correct .badge { background: var(--success); color: #fff; }
+  .option.wrong { border-color: var(--danger); background: rgba(255, 59, 48, 0.1); color: #000; }
+  .option.wrong .badge { background: var(--danger); color: #fff; }
+
+  .explanation {
+    display: none; background: rgba(255,255,255,0.9); border-left: 4px solid var(--primary);
+    padding: 15px; border-radius: 8px; margin-top: 20px; font-size: 15px; line-height: 1.6; color: #444;
+  }
+  .explanation.active { display: block; animation: fadeIn 0.3s; }
+
+  .score-circle {
+    width: 120px; height: 120px; border-radius: 60px; background: linear-gradient(135deg, #007aff, #00c7be);
+    color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    margin: 0 auto 20px auto; box-shadow: 0 10px 20px rgba(0,122,255,0.3);
+  }
+  .score-circle span { font-size: 40px; font-weight: 800; line-height: 1; }
+  .score-circle small { font-size: 12px; opacity: 0.8; margin-top: 5px; }
+  .ai-comment { background: rgba(0, 122, 255, 0.1); border-radius: 12px; padding: 15px; color: #007aff; font-weight: 600; text-align: center; margin-bottom: 20px; }
+
+  /* === 悬浮画板系统 (Apple Pencil 支持) === */
+  #pencil-fab {
+    position: fixed; right: 20px; bottom: 30px; z-index: 100;
+    width: 60px; height: 60px; border-radius: 30px; background: #fff;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15); border: 1px solid #ddd;
+    display: flex; align-items: center; justify-content: center; font-size: 28px;
+    cursor: pointer; transition: transform 0.2s;
+  }
+  #pencil-fab:active { transform: scale(0.9); }
+
+  #drawing-board {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 200;
+    background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: none; flex-direction: column;
+  }
+  #drawing-board.active { display: flex; animation: fadeIn 0.3s; }
+  
+  .board-toolbar {
+    height: 60px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; background: #fff; border-bottom: 1px solid #eee; margin-top: env(safe-area-inset-top);
+  }
+  .board-toolbar .tools { display: flex; gap: 15px; }
+  .board-toolbar .t-btn {
+    padding: 8px 16px; border-radius: 8px; border: none; background: #f0f0f0; font-weight: bold; cursor: pointer;
+  }
+  .board-toolbar .t-btn.active { background: var(--primary); color: #fff; }
+  .board-toolbar .close-btn { background: none; border: none; font-size: 18px; font-weight: bold; color: var(--danger); cursor: pointer; }
+  
+  canvas { flex: 1; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+</style>
+</head>
+<body>
+
+<!-- 悬浮画板按钮 (只在答题页显示) -->
+<div id="pencil-fab" style="display:none;" onclick="toggleBoard()">✏️</div>
+
+<!-- 全屏画板 -->
+<div id="drawing-board">
+  <div class="board-toolbar">
+    <div class="tools">
+      <button class="t-btn active" id="tool-pen" onclick="setTool('pen')">✒️ 画笔</button>
+      <button class="t-btn" id="tool-eraser" onclick="setTool('eraser')">🧽 橡皮</button>
+    </div>
+    <button class="t-btn" onclick="saveCanvas()">💾 存图</button>
+    <button class="close-btn" onclick="toggleBoard()">完成</button>
+  </div>
+  <canvas id="whiteboard"></canvas>
+</div>
+
+<div class="container">
+  <div class="card active" id="home-card">
+    <h2>📚 极简智能题库 Pro</h2>
+    <p style="font-size: 14px; color: #666;">无需安装，粘贴即刷。自带草稿纸，完美适配 Apple Pencil。</p>
+    <textarea id="input-area" placeholder="在这里粘贴题目..."></textarea>
+    <button class="btn" onclick="parseAndStart()">开始智能刷题</button>
+    <button class="btn sec" style="margin-top: 10px;" onclick="loadDemo()">填入演示题目</button>
+  </div>
+
+  <div class="card" id="quiz-card">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div style="display: flex; justify-content: space-between; font-size: 13px; color: #666; margin-bottom: 15px;">
+      <span id="progress-text">1 / 10</span>
+      <span id="score-text">正确: 0</span>
+    </div>
+    <div class="q-title" id="q-title">题目加载中...</div>
+    <div id="options-container"></div>
+    <div class="explanation" id="explanation-box">
+      <b>💡 解析：</b><br><span id="explanation-text"></span>
+    </div>
+    <button class="btn" id="next-btn" style="display: none; margin-top: 20px;" onclick="nextQuestion()">下一题</button>
+  </div>
+
+  <div class="card" id="end-card">
+    <h2 style="text-align: center;">练习完成</h2>
+    <div class="score-circle">
+      <span id="final-score">0</span>
+      <small>正确率</small>
+    </div>
+    <div class="ai-comment" id="ai-comment">评价生成中...</div>
+    <button class="btn sec" onclick="location.reload()">返回首页 / 换一套题</button>
+  </div>
+</div>
+
+<script>
+// ================= 核心题库逻辑 =================
+let questions = [];
+let currentIndex = 0;
+let correctCount = 0;
+
+function parseAndStart() {
+  const text = document.getElementById('input-area').value.trim();
+  if (!text) { alert("请先输入题目内容！"); return; }
+
+  const blocks = text.split(/(?=题目\d*[:：]|\d+[\.．])/g).filter(b => b.trim());
+  questions = blocks.map(block => {
+    const qMatch = block.match(/(?:题目\d*[:：]|\d+[\.．])([\s\S]*?)(?=[A-D][\.．]|答案)/);
+    const qText = qMatch ? qMatch[1].trim() : "解析失败";
+    const opts = [];
+    const optMatches = block.matchAll(/([A-D])[\.．]\s*([^\n]+)/g);
+    for (const match of optMatches) { opts.push(match[2].trim()); }
+    const ansMatch = block.match(/答案[:：]\s*([A-D])/i);
+    const ansStr = ansMatch ? ansMatch[1].toUpperCase() : "";
+    const ansIdx = ["A", "B", "C", "D"].indexOf(ansStr);
+    return { q: qText, opts: opts, ans: ansIdx, exp: ansIdx !== -1 ? `正确答案是 ${ansStr}。请仔细核对知识点，如果仍有疑问，可用 AI 工具深度解析。` : "无解析" };
+  }).filter(q => q.opts.length > 0 && q.ans !== -1);
+
+  if (questions.length === 0) { alert("格式似乎不对哦，请参考示例。"); return; }
+
+  document.getElementById('home-card').classList.remove('active');
+  document.getElementById('quiz-card').classList.add('active');
+  document.getElementById('pencil-fab').style.display = 'flex'; // 显示草稿纸按钮
+  
+  currentIndex = 0; correctCount = 0; renderQuestion();
+}
+
+function renderQuestion() {
+  const q = questions[currentIndex];
+  document.getElementById('progress-fill').style.width = ((currentIndex) / questions.length) * 100 + '%';
+  document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${questions.length}`;
+  document.getElementById('score-text').innerText = `正确: ${correctCount}`;
+  document.getElementById('q-title').innerText = q.q;
+  
+  const container = document.getElementById('options-container');
+  container.innerHTML = '';
+  q.opts.forEach((opt, i) => {
+    const div = document.createElement('div');
+    div.className = 'option';
+    div.innerHTML = `<div class="badge">${String.fromCharCode(65 + i)}</div> ${opt}`;
+    div.onclick = () => selectOption(i, div);
+    container.appendChild(div);
+  });
+  
+  document.getElementById('explanation-box').classList.remove('active');
+  document.getElementById('next-btn').style.display = 'none';
+  clearCanvas(); // 换题时自动清空草稿纸
+}
+
+function selectOption(selectedIdx, el) {
+  const q = questions[currentIndex];
+  document.querySelectorAll('.option').forEach(o => o.onclick = null);
+  if (selectedIdx === q.ans) { el.classList.add('correct'); correctCount++; } 
+  else { el.classList.add('wrong'); document.querySelectorAll('.option')[q.ans].classList.add('correct'); }
+  document.getElementById('score-text').innerText = `正确: ${correctCount}`;
+  document.getElementById('explanation-text').innerText = q.exp;
+  document.getElementById('explanation-box').classList.add('active');
+  const nextBtn = document.getElementById('next-btn');
+  nextBtn.style.display = 'block';
+  if (currentIndex === questions.length - 1) nextBtn.innerText = '查看最终成绩';
+}
+
+function nextQuestion() {
+  currentIndex++;
+  if (currentIndex < questions.length) { renderQuestion(); } 
+  else { showResults(); }
+}
+
+function showResults() {
+  document.getElementById('quiz-card').classList.remove('active');
+  document.getElementById('end-card').classList.add('active');
+  document.getElementById('pencil-fab').style.display = 'none'; // 隐藏草稿纸
+  
+  const rate = Math.round((correctCount / questions.length) * 100);
+  document.getElementById('final-score').innerText = rate + '%';
+  const ai = document.getElementById('ai-comment');
+  if (rate === 100) { ai.innerText = "🎉 满分通关！你的基础如磐石般稳固。"; ai.style.color = "#34c759"; }
+  else if (rate >= 80) { ai.innerText = "👍 表现优秀！个别错题复习一遍即可。"; }
+  else if (rate >= 60) { ai.innerText = "💪 基础尚可，建议回顾解析重新梳理。"; ai.style.color = "#ff9500"; }
+  else { ai.innerText = "🤔 错题较多。建议放慢节奏，善用草稿纸一步步推演。"; ai.style.color = "#ff3b30"; }
+}
+
+function loadDemo() {
+  document.getElementById('input-area').value = `题目1：已知二次函数 y = x^2 - 4x + 3，求它的对称轴？
+A. x = -2
+B. x = 2
+C. x = 4
+D. x = -4
+答案: B
+
+题目2：sin(30°) 的值是多少？
+A. 1/2
+B. √2/2
+C. √3/2
+D. 1
+答案: A`;
+}
+
+// ================= Apple Pencil 画板逻辑 =================
+const canvas = document.getElementById('whiteboard');
+const ctx = canvas.getContext('2d');
+let isDrawing = false;
+let currentTool = 'pen';
+
+// 初始化画板尺寸，支持高清屏
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = (rect.height - 60) * dpr; // 减去工具栏高度
+  ctx.scale(dpr, dpr);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+}
+window.addEventListener('resize', resizeCanvas);
+
+function toggleBoard() {
+  const board = document.getElementById('drawing-board');
+  if (!board.classList.contains('active')) {
+    board.classList.add('active');
+    resizeCanvas();
+  } else {
+    board.classList.remove('active');
+  }
+}
+
+function setTool(tool) {
+  currentTool = tool;
+  document.getElementById('tool-pen').classList.remove('active');
+  document.getElementById('tool-eraser').classList.remove('active');
+  document.getElementById('tool-' + tool).classList.add('active');
+}
+
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+// 兼容鼠标、手指、Apple Pencil
+canvas.addEventListener('pointerdown', (e) => {
+  isDrawing = true;
+  const pos = getPos(e);
+  ctx.beginPath();
+  ctx.moveTo(pos.x, pos.y);
+  
+  // 针对 Apple Pencil 做一点压感优化，如果没压感就用固定粗细
+  const pressure = e.pressure && e.pointerType === 'pen' ? e.pressure * 4 : 1;
+  
+  if (currentTool === 'pen') {
+    ctx.strokeStyle = '#007aff';
+    ctx.lineWidth = pressure * 2.5;
+  } else {
+    ctx.strokeStyle = 'rgba(255,255,255,1)'; // 白底橡皮擦
+    ctx.lineWidth = 20;
+  }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!isDrawing) return;
+  const pos = getPos(e);
+  if (currentTool === 'pen') {
+    const pressure = e.pressure && e.pointerType === 'pen' ? e.pressure * 4 : 1;
+    ctx.lineWidth = pressure * 2.5;
+  }
+  ctx.lineTo(pos.x, pos.y);
+  ctx.stroke();
+});
+
+canvas.addEventListener('pointerup', () => { isDrawing = false; });
+canvas.addEventListener('pointercancel', () => { isDrawing = false; });
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// 保存画板为图片到本地
+function saveCanvas() {
+  const link = document.createElement('a');
+  link.download = `草稿_${new Date().getTime()}.png`;
+  // 导出前垫一个白底，防止透明背景看不清
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = canvas.width;
+  tempCanvas.height = canvas.height;
+  const tCtx = tempCanvas.getContext('2d');
+  tCtx.fillStyle = '#ffffff';
+  tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+  tCtx.drawImage(canvas, 0, 0);
+  
+  link.href = tempCanvas.toDataURL('image/png');
+  link.click();
+}
+</script>
+</body>
+</html>
